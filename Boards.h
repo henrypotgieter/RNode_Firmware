@@ -399,7 +399,7 @@
       #define HAS_LORA_LNA true
       #define PIN_WAKEUP GPIO_NUM_0
       #define WAKEUP_LEVEL 0
-      #define OCP_TUNED 0x18
+      #define OCP_TUNED 0x38
       #define Vext GPIO_NUM_36
 
       const int pin_btn_usr1 = 0;
@@ -422,14 +422,17 @@
 
       #define LORA_LNA_GAIN  17
       #define LORA_LNA_GVT   12
-      #define LORA_PA_GC1109 true
+      #define LORA_PA_AUTO_DETECT true
       #define LORA_PA_PWR_EN  7
-      #define LORA_PA_CSD     2
-      #define LORA_PA_CPS    46
+      #define LORA_PA_CSD     2  // GC1109: PA_EN | KCT8103L: CSD (same pin, different pull resistor)
+      #define LORA_PA_CTX     5  // KCT8103L: TX/LNA select (CTX=LOW=LNA, CTX=HIGH=PA)
+      #define LORA_PA_CPS    46  // GC1109: TX_EN
 
-      #define PA_MAX_OUTPUT  28
-      #define PA_GAIN_POINTS 22
-      #define PA_GAIN_VALUES 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
+      #define PA_MAX_OUTPUT          28
+      #define PA_GAIN_POINTS         22
+      #define PA_GC1109_GAIN_VALUES   11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 10, 10, 9, 9, 8, 7
+      #define PA_KCT8103L_GAIN_VALUES 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 12, 12, 11, 11, 10, 9, 8, 7
+      #define PA_GAIN_VALUES PA_KCT8103L_GAIN_VALUES // compile-time fallback; runtime detection selects correct table
 
       const int pin_cs = 8;
       const int pin_busy = 13;

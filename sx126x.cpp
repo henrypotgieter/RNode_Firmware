@@ -335,7 +335,9 @@ int sx126x::begin(long frequency) {
   setFrequency(frequency);
   setTxPower(2);
   enableCrc();
-  writeRegister(REG_LNA_6X, 0x96); // Set LNA boost
+  writeRegister(REG_LNA_6X, 0x96); // Set LNA boosted gain mode
+  // Undocumented SX1262 register patch recommended by Heltec/Semtech for improved RX sensitivity.
+  writeRegister(0x08B5, readRegister(0x08B5) | 0x01);
   uint8_t basebuf[2] = {0}; // Set base addresses
   executeOpcode(OP_BUFFER_BASE_ADDR_6X, basebuf, 2);
 
@@ -343,31 +345,29 @@ int sx126x::begin(long frequency) {
   setPacketParams(_preambleLength, _implicitHeaderMode, _payloadLength, _crcMode);
 
   #if HAS_LORA_PA
-    #if LORA_PA_GC1109
-      // Enable Vfem_ctl for supply to
-      // PA power net.
+    #if LORA_PA_AUTO_DETECT
+      // Power up the FEM, then read GPIO LORA_PA_CSD as input.
+      // The V4.2 (GC1109) board pulls it LOW; V4.3 (KCT8103L) pulls it HIGH.
       pinMode(LORA_PA_PWR_EN, OUTPUT);
       digitalWrite(LORA_PA_PWR_EN, HIGH);
+      delay(1);
+      pinMode(LORA_PA_CSD, INPUT);
+      delay(1);
+      _kct8103l = (digitalRead(LORA_PA_CSD) == HIGH);
 
-      // Enable PA LNA and TX standby
-      pinMode(LORA_PA_CSD, OUTPUT);
-      digitalWrite(LORA_PA_CSD, HIGH);
-
-      // Keep PA CPS low until actual
-      // transmit. Does it save power?
-      // Who knows? Will have to measure.
-      // Note from the future: Nope.
-      // Power consumption is the same,
-      // and turning it on and off is
-      // not something that it likes.
-      // Keeping it high for now.
-      pinMode(LORA_PA_CPS, OUTPUT);
-      digitalWrite(LORA_PA_CPS, HIGH);
-
-      // On Heltec V4, the PA CTX pin
-      // is driven by the SX1262 DIO2
-      // pin directly, so we do not
-      // need to manually raise this.
+      if (_kct8103l) {
+        // KCT8103L (V4.3): CSD=HIGH enables chip, CTX=LOW=LNA/RX, CTX=HIGH=PA/TX
+        pinMode(LORA_PA_CSD, OUTPUT);
+        digitalWrite(LORA_PA_CSD, HIGH);
+        pinMode(LORA_PA_CTX, OUTPUT);
+        digitalWrite(LORA_PA_CTX, LOW); // LNA enabled by default
+      } else {
+        // GC1109 (V4.2): PA_EN=HIGH enables chip, CPS=HIGH=full PA mode
+        pinMode(LORA_PA_CSD, OUTPUT);
+        digitalWrite(LORA_PA_CSD, HIGH);
+        pinMode(LORA_PA_CPS, OUTPUT);
+        digitalWrite(LORA_PA_CPS, HIGH);
+      }
     #endif
   #endif
 
@@ -378,12 +378,12 @@ void sx126x::end() { sleep(); SPI.end(); _preinit_done = false; }
 
 int sx126x::beginPacket(int implicitHeader) {
   #if HAS_LORA_PA
-    #if LORA_PA_GC1109
-      // Enable PA CPS for transmit
-      // digitalWrite(LORA_PA_CPS, HIGH);
-      // Disabled since we're keeping it
-      // on permanently as long as the
-      // radio is powered up.
+    #if LORA_PA_AUTO_DETECT
+      if (_kct8103l) {
+        // CTX=HIGH: switch KCT8103L to PA/TX mode.
+        digitalWrite(LORA_PA_CTX, HIGH);
+      }
+      // GC1109: CPS kept HIGH permanently, no action needed.
     #endif
   #endif
 
@@ -595,14 +595,12 @@ void sx126x::onReceive(void(*callback)(int)){
 
 void sx126x::receive(int size) {
   #if HAS_LORA_PA
-    #if LORA_PA_GC1109
-      // Disable PA CPS for receive
-      // digitalWrite(LORA_PA_CPS, LOW);
-      // That turned out to be a bad idea.
-      // The LNA goes wonky if it's toggled
-      // on and off too quickly. We'll keep
-      // it on permanently, as long as the
-      // radio is powered up.
+    #if LORA_PA_AUTO_DETECT
+      if (_kct8103l) {
+        // CTX=LOW: switch KCT8103L to LNA/RX mode.
+        digitalWrite(LORA_PA_CTX, LOW);
+      }
+      // GC1109: CPS kept HIGH permanently, no action needed.
     #endif
   #endif
 
